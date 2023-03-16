@@ -1,4 +1,4 @@
 #ifndef CAM_H
 #define CAM_H
-void wifi_ap_setup();
+void setup_cam_udp();
 #endif
