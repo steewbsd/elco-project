@@ -2,25 +2,14 @@
 #include <WiFiUdp.h>
 #include <esp_camera.h>
 
-const char* ssid = "TU_RED_WIFI";
-const char* password = "TU_PASSWORD_WIFI";
+void setup_cam_udp()
+{
+  IPAddress ip(192, 168, 1, 177);  // IP del ESP32
+  unsigned int localPort = 5000;   // Puerto para recibir paquetes UDP
+  unsigned int remotePort = 10000; // Puerto para enviar paquetes UDP
+  char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
 
-IPAddress ip(192, 168, 1, 177); // IP del ESP32
-unsigned int localPort = 5000;  // Puerto para recibir paquetes UDP
-unsigned int remotePort = 10000; // Puerto para enviar paquetes UDP
-char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
-
-WiFiUDP udp;
-
-void setup() {
-  Serial.begin(115200);
-
-  // Conexión WiFi
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
+  WiFiUDP udp;
 
   // Inicialización de la cámara
   camera_config_t config;
@@ -49,7 +38,8 @@ void setup() {
   config.fb_count = 1;
 
   esp_err_t err = esp_camera_init(&config);
-  if (err != ESP_OK) {
+  if (err != ESP_OK)
+  {
     Serial.printf("Camera init failed with error 0x%x", err);
     return;
   }
@@ -59,17 +49,20 @@ void setup() {
   Serial.printf("Local port: %d\n", udp.localPort());
 }
 
-void loop() {
+void loop()
+{
   // Captura de imagen
-  camera_fb_t * fb = esp_camera_fb_get();
-  if (!fb) {
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb)
+  {
     Serial.println("Camera capture failed");
     return;
   }
 
   // Envío de imagen por UDP
   int packetSize = fb->len;
-  for (int i = 0; i < packetSize; i += UDP_TX_PACKET_MAX_SIZE) {
+  for (int i = 0; i < packetSize; i += UDP_TX_PACKET_MAX_SIZE)
+  {
     int packetLength = min(UDP_TX_PACKET_MAX_SIZE, packetSize - i);
     memcpy(packetBuffer, fb->buf + i, packetLength);
     udp.beginPacket(ip, remotePort);
