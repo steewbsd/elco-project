@@ -1,4 +1,5 @@
 #ifndef CAM_H
 #define CAM_H
-void setup_cam_udp();
+#include <esp_camera.h>
+void setup_cam_udp(camera_config_t * camconf);
 #endif
