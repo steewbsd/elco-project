@@ -1,18 +1,19 @@
 #include "wifi.h"
 #include "control.h"
 #include "cam.h"
+#include "Arduino.h"
 
 void setup() {
    	Serial.begin(115200);
     /* TODO: pass required structures to the functions or return them (WiFiUdp struct etc.) */
-    setup_cam_udp();
-    setup_tcp();
+    //setup_cam_udp();
+    //setup_tcp();
     wifi_ap_setup();
 }
 
 void loop()
 {
-  // Captura de imagen
+/*   // Captura de imagen
   camera_fb_t *fb = esp_camera_fb_get();
   if (!fb)
   {
@@ -33,5 +34,5 @@ void loop()
   }
 
   // Liberación de memoria
-  esp_camera_fb_return(fb);
+  esp_camera_fb_return(fb); */
 }

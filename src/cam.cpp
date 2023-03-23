@@ -4,7 +4,7 @@
 
 void setup_cam_udp()
 {
-  char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
+  //char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
 
   WiFiUDP udp;
 
@@ -42,7 +42,7 @@ void setup_cam_udp()
   }
 
   // Configuración de UDP
-  udp.begin(localPort);
-  Serial.printf("Local port: %d\n", udp.localPort());
+  //udp.begin(localPort);
+  //Serial.printf("Local port: %d\n", udp.localPort());
 }
 
