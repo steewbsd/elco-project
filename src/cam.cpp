@@ -2,6 +2,8 @@
 #include <WiFiUdp.h>
 #include <esp_camera.h>
 
+#define CAMERA_MODEL_AI_THINKER
+
 void setup_cam_udp(camera_config_t * camconf)
 {
   //char packetBuffer[UDP_TX_PACKET_MAX_SIZE];
