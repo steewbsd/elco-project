@@ -1,33 +1,67 @@
-#include <lwip/sockets.h>  
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <lwip/sockets.h>
+// #include <netinet/in.h>
 
-void setup_tcp() {
-    /* create recv buffer */
-    char rx_buffer[BUFSIZ] = {0};
+#define PORT 6666
 
-    /* create socket */
-    int sock = socket(PF_INET, SOCK_STREAM, 0);
-    //if (sock < 0) ESP_LOGE("No se pudo crear el socket");
+void setup_tcp()
+{
+    int server_fd, new_socket, valread;
+    struct sockaddr_in address;
     int opt = 1;
-    /* set socket options (listen socket) */
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    struct sockaddr_in sa;
-    sa.sin_addr.s_addr = htonl(INADDR_ANY);
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(6666);
+    int addrlen = sizeof(address);
+    char buffer[1024] = {0};
+    //char *hello = "Hello from server";
 
-    /* bind socket */
-    int err = bind(sock, (struct sockaddr *)&sa, sizeof(sa));
-    //if (err != 0) ESP_LOGE("No se pudo vincular el socket");
-    /* start listening in the socket */
-    err = listen(sock, 1);
-
-    for(;;) {
-        int len = 0;
-        do {
-            len = recv(sock, rx_buffer, sizeof(rx_buffer) - 1, 0);
-            rx_buffer[len] = 0;
-            //ESP_LOGI(rx_buffer);
-        } while (len > 0);
+    // Creating socket fd
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+    {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
     }
+
+    // Attaching socket to the port 6666
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
+    {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    // Binding the socket to the specified address and port
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
+    {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Listening for incoming connections
+    if (listen(server_fd, 3) < 0)
+    {
+        perror("listen");
+        exit(EXIT_FAILURE);
+    }
+
+    // Accepting incoming connections
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
+    {
+        perror("accept");
+        exit(EXIT_FAILURE);
+    }
+
+    // Reading data from the client
+    valread = read(new_socket, buffer, 1024);
+    printf("%s\n", buffer);
+
+    /*
+    // Sending data to the client
+    send(new_socket, hello, strlen(hello), 0);
+    printf("Hello message sent\n");
+    */
 
 }

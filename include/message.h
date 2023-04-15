@@ -10,8 +10,9 @@ struct Message {
 };
 
 enum CMD_IDENT {
-    MOTOR = 0x00,
-    SENSOR = 0x01,
+    MOTOR = 0x01,
+    SENSOR = 0x02,
+    ACK = 0x03,
 };
 
 enum CMD_MOTOR_IDENT {

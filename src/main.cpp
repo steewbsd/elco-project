@@ -1,60 +1,33 @@
 #include "wifi.h"
 #include "control.h"
 #include "cam.h"
-#include "Arduino.h"
 #include "message.h"
+
 #include <WiFiUdp.h>
-#include <esp_camera.h>
 #include <HardwareSerial.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #define LISTEN_PORT 1000
-#define CAMERA_MODEL_AI_THINKER
 
-HardwareSerial interboard(1);
+HardwareSerial IPC(1);
 
 WiFiUDP udp;
 camera_config_t camconf;
 void setup()
 {
+  // Local ESP32 serial monitor
   Serial.begin(9600);
-  interboard.begin(115200, SERIAL_8N1, 18, 19);
-  /* TODO: pass required structures to the functions or return them (WiFiUdp struct etc.) */
+  // Inter board UART communication with pins 18 (rx) and 19 (tx)
+  IPC.begin(115200, SERIAL_8N1, 18, 19);
   /* Listen on port 1000 */
   setup_cam_udp(&camconf);
-  // setup_tcp();
   wifi_ap_setup();
   udp.begin(LISTEN_PORT);
 }
 
 void loop()
 {
-  /* // Captura de imagen
-  camera_fb_t *fb = esp_camera_fb_get();
-  if (!fb)
-  {
-    Serial.println("Camera capture failed");
-    return;
-  }
-
-  // Envío de imagen por UDP
-  int packetSize = fb->len;
-  //int remoteIp = "10.0.0.3";
-  int remotePort = 1000;
-  char packetBuffer[1024];
-  for (int i = 0; i < packetSize; i += 100)
-  {
-    int packetLength = min(100, packetSize - i);
-    memcpy(packetBuffer, fb->buf + i, packetLength);
-    //char packetBuffer[] = "Hola, mundo\n";
-    //memcpy(packetBuffer, fb->buf + i, packetLength);
-    udp.beginPacket("10.0.0.4", 1000);
-    udp.write((const unsigned char *)packetBuffer, packetLength);
-    udp.endPacket();
-    delay(100);
-  }
-
-  // Liberación de memoria
-  esp_camera_fb_return(fb); */
   /* Read from the arduino */
   if (Serial.available() > 0)
   {
@@ -102,7 +75,7 @@ void loop()
     {
       byte b = (raw >> (8 * i)) & 0xFF;
       Serial.printf("%x\n", b);
-      interboard.write(b);
+      IPC.write(b);
     }
 
     // Send control message
