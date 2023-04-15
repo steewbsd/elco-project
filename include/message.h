@@ -27,6 +27,6 @@ enum CMD_MOTOR_IDENT {
     // Join to make a bitmask
 };
 
-Message msg_gen (CMD_IDENT ident, uint8_t payload);
-uint32_t msg_to_bytes(Message * msg);
+struct Message msg_gen (enum CMD_IDENT ident, uint8_t payload);
+uint32_t msg_to_bytes(struct Message * msg);
 #endif
