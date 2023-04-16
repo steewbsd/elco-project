@@ -1,12 +1,15 @@
-// #include "cam.h"
-// #include "control.h"
+/* ESP32 master program: 
+ * Check & forward TCP messages to Arduino sent from the remote client
+ * Establish a WiFi SoftAP 
+ * Control other stuff, camera stream 
+*/
 #include "driver/uart.h"
 #include "esp_event.h"
 #include "esp_mac.h"
 #include "esp_wifi.h"
 #include "message.h"
-
 #include "nvs_flash.h"
+
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -15,23 +18,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-// #include <WiFiUdp.h>
 
 #define EXAMPLE_ESP_WIFI_SSID "ELCO-BEACON"
 #define EXAMPLE_ESP_WIFI_PASS "baconfrito5"
 #define EXAMPLE_ESP_WIFI_CHANNEL 6
 #define EXAMPLE_MAX_STA_CONN 4
 
-#define LISTEN_PORT 1000
 #define TCP_PORT 6666
 
-// Utilize UART1 to communicate with another board (Arduino)
-// HardwareSerial IPC(1);
 TaskHandle_t listenHandle = NULL;
 TaskHandle_t listenTCPHandle = NULL;
-// WiFiUDP udp;
+// globals
 static const char *vWifiTag = "wifi softAP";
-// Globals
+static const uart_port_t IPC = UART_NUM_1;
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
@@ -119,9 +118,9 @@ void vControlListener(char *buf) {
 
   /* Forward control message to the Arduino board */
   if (msg.cmd_ident == MOTOR) {
-    // TODO: implement IPC
     printf("Received MOTOR command\n");
-    // for (int i = 3; i >= 0; i--) IPC.write(b[i]);
+    for (int i = 3; i >= 0; i--)
+      uart_write_bytes(IPC, b[i], sizeof(uint8_t));
     // nothing else we can do here
     return;
   }
@@ -174,19 +173,10 @@ void vTcpReceiver(void *arg) {
       memset(buffer, 0, sizeof(buffer));
     }
   }
-
-  /*  // Sending data to the client
-   send(new_socket, hello, strlen(hello), 0);
-   printf("Hello message sent\n"); */
 }
 
 void app_main(void) {
-  // Local ESP32 serial monitor
-  // Serial.begin(9600);
-  // Inter board UART communication with pins 18 (rx) and 19 (tx)
-  // IPC.begin(115200, SERIAL_8N1, 18, 19);
-  /* Listen on port 1000 */
-  // udp.begin(LISTEN_PORT);
+  /* ESP32 nvs */
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
       ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -196,7 +186,6 @@ void app_main(void) {
   ESP_ERROR_CHECK(ret);
 
   // UART1 Peripheral initialization
-  const uart_port_t uart_num = UART_NUM_1;
   uart_config_t uart_config = {
       .baud_rate = 115200,
       .data_bits = UART_DATA_8_BITS,
@@ -204,13 +193,14 @@ void app_main(void) {
       .stop_bits = UART_STOP_BITS_1,
       .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
   };
+
   // Configure UART pins tx: 19, rx: 18
   uart_set_pin(UART_NUM_1, 19, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  ESP_ERROR_CHECK(uart_param_config(IPC, &uart_config));
+
+  wifi_init_softap();
 
   // FreeRTOS task initializer
-  wifi_init_softap();
-  // xTaskCreate(vControlListener, "Message control listener", 4096, NULL, 10,
-  //            &listenHandle);
   xTaskCreate(vTcpReceiver, "TCP Receiver", 8192, NULL, 2, &listenTCPHandle);
   while (1)
     vTaskDelay(10);
