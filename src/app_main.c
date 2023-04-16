@@ -1,18 +1,19 @@
 // #include "cam.h"
 // #include "control.h"
-#include "message.h"
+#include "esp_event.h"
 #include "esp_mac.h"
 #include "esp_wifi.h"
-#include "esp_event.h"
+#include "message.h"
 
+#include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <lwip/sockets.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <esp_log.h>
 #include <unistd.h>
+#include "nvs_flash.h"
 // #include <WiFiUdp.h>
 
 #define EXAMPLE_ESP_WIFI_SSID "ELCO-BEACON"
@@ -30,24 +31,21 @@ TaskHandle_t listenHandle = NULL;
 static const char *vWifiTag = "wifi softAP";
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
-                               int32_t event_id, void *event_data)
-{
-  if (event_id == WIFI_EVENT_AP_STACONNECTED)
-  {
-    wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
-    ESP_LOGI(vWifiTag, "station " MACSTR " join, AID=%d",
-             MAC2STR(event->mac), event->aid);
-  }
-  else if (event_id == WIFI_EVENT_AP_STADISCONNECTED)
-  {
-    wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
-    ESP_LOGI(vWifiTag, "station " MACSTR " leave, AID=%d",
-             MAC2STR(event->mac), event->aid);
+                               int32_t event_id, void *event_data) {
+  if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+    wifi_event_ap_staconnected_t *event =
+        (wifi_event_ap_staconnected_t *)event_data;
+    ESP_LOGI(vWifiTag, "station " MACSTR " join, AID=%d", MAC2STR(event->mac),
+             event->aid);
+  } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+    wifi_event_ap_stadisconnected_t *event =
+        (wifi_event_ap_stadisconnected_t *)event_data;
+    ESP_LOGI(vWifiTag, "station " MACSTR " leave, AID=%d", MAC2STR(event->mac),
+             event->aid);
   }
 }
 
-void wifi_init_softap(void)
-{
+void wifi_init_softap(void) {
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
   esp_netif_create_default_wifi_ap();
@@ -55,27 +53,26 @@ void wifi_init_softap(void)
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
   ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-  ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                      ESP_EVENT_ANY_ID,
-                                                      &wifi_event_handler,
-                                                      NULL,
-                                                      NULL));
+  ESP_ERROR_CHECK(esp_event_handler_instance_register(
+      WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
 
   wifi_config_t wifi_config = {
-      .ap = {
-          .ssid = EXAMPLE_ESP_WIFI_SSID,
-          .password = EXAMPLE_ESP_WIFI_PASS,
-          .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
-          .channel = EXAMPLE_ESP_WIFI_CHANNEL,
-          .authmode = WIFI_AUTH_WPA2_PSK,
-          .max_connection = EXAMPLE_MAX_STA_CONN,
-          .pmf_cfg = {
-              .required = true,
+      .ap =
+          {
+              .ssid = EXAMPLE_ESP_WIFI_SSID,
+              .password = EXAMPLE_ESP_WIFI_PASS,
+              .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
+              .channel = EXAMPLE_ESP_WIFI_CHANNEL,
+              .authmode = WIFI_AUTH_WPA2_PSK,
+              .ssid_hidden = 0,
+              .max_connection = EXAMPLE_MAX_STA_CONN,
+              .pmf_cfg =
+                  {
+                      .required = true,
+                  },
           },
-      },
   };
-  if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0)
-  {
+  if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
     wifi_config.ap.authmode = WIFI_AUTH_OPEN;
   }
 
@@ -83,60 +80,64 @@ void wifi_init_softap(void)
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
   ESP_ERROR_CHECK(esp_wifi_start());
 
-  ESP_LOGI(vWifiTag, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-           EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
+  ESP_LOGI(
+      vWifiTag, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
+      EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 
-void vControlListener(void *arg)
-{
+void vControlListener(void *arg) {
   static const char *vcl = "vControlListener";
+  TickType_t last;
+  const TickType_t xFrequency = 10;
+  last = xTaskGetTickCount();
   char recv = 0;
   struct Message msg = {0};
-  switch (recv)
-  {
-  case '1':
-    ESP_LOGI(vcl, "FWD_R");
-    msg = msg_gen(MOTOR, FWD_R);
-    break;
-  case '2':
-    ESP_LOGI(vcl, "FWD_L");
-    msg = msg_gen(MOTOR, FWD_L);
-    break;
-  case '3':
-    ESP_LOGI(vcl, "RWD_R");
-    msg = msg_gen(MOTOR, RWD_R);
-    break;
-  case '4':
-    ESP_LOGI(vcl, "RWD_L");
-    msg = msg_gen(MOTOR, RWD_L);
-    break;
-  case '5':
-    ESP_LOGI(vcl, "FWD");
-    msg = msg_gen(MOTOR, FWD_R | FWD_L);
-    break;
-  case '6':
-    ESP_LOGI(vcl, "BWD");
-    msg = msg_gen(MOTOR, RWD_R | RWD_L);
-    break;
-  case '7':
-    ESP_LOGI(vcl, "ALL");
-    msg = msg_gen(MOTOR, FWD_R | FWD_L | RWD_R | RWD_L);
-    break;
-  default:
-    ESP_LOGI(vcl, "None");
-    uint32_t raw = 0;
-    raw = msg_to_bytes(&msg);
-    for (int i = 0; i < 4; i++)
-    {
-      uint8_t b = (raw >> (8 * i)) & 0xFF;
-      // Serial.printf("%x\n", b);
-      // IPC.write(b);
+  for (;;) {
+    switch (recv) {
+    case '1':
+      ESP_LOGI(vcl, "FWD_R");
+      msg = msg_gen(MOTOR, FWD_R);
+      break;
+    case '2':
+      ESP_LOGI(vcl, "FWD_L");
+      msg = msg_gen(MOTOR, FWD_L);
+      break;
+    case '3':
+      ESP_LOGI(vcl, "RWD_R");
+      msg = msg_gen(MOTOR, RWD_R);
+      break;
+    case '4':
+      ESP_LOGI(vcl, "RWD_L");
+      msg = msg_gen(MOTOR, RWD_L);
+      break;
+    case '5':
+      ESP_LOGI(vcl, "FWD");
+      msg = msg_gen(MOTOR, FWD_R | FWD_L);
+      break;
+    case '6':
+      ESP_LOGI(vcl, "BWD");
+      msg = msg_gen(MOTOR, RWD_R | RWD_L);
+      break;
+    case '7':
+      ESP_LOGI(vcl, "ALL");
+      msg = msg_gen(MOTOR, FWD_R | FWD_L | RWD_R | RWD_L);
+      break;
+    default:
+      ESP_LOGI(vcl, "None");
+      uint32_t raw = 0;
+      raw = msg_to_bytes(&msg);
+      for (int i = 0; i < 4; i++) {
+        uint8_t b = (raw >> (8 * i)) & 0xFF;
+        // Serial.printf("%x\n", b);
+        // IPC.write(b);
+      }
     }
+    // wait to receive another command
+    // vTaskDelayUntil(&last, xFrequency);
   }
 }
-
-void vTcpReceiver(void *arg)
-{
+// TODO: switch to FreeRTOS tcp implementation
+void vTcpReceiver(void *arg) {
   int server_fd, new_socket, valread;
   struct sockaddr_in address;
   int opt = 1;
@@ -145,15 +146,14 @@ void vTcpReceiver(void *arg)
   // char *hello = "Hello from server";
 
   // Creating socket fd
-  if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
-  {
+  if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
     perror("socket failed");
     exit(EXIT_FAILURE);
   }
 
   // Attaching socket to the port 6666
-  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)))
-  {
+  if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt,
+                 sizeof(opt))) {
     perror("setsockopt");
     exit(EXIT_FAILURE);
   }
@@ -162,29 +162,30 @@ void vTcpReceiver(void *arg)
   address.sin_port = htons(TCP_PORT);
 
   // Binding the socket to the specified address and port
-  if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0)
-  {
+  if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
     perror("bind failed");
     exit(EXIT_FAILURE);
   }
 
   // Listening for incoming connections
-  if (listen(server_fd, 3) < 0)
-  {
+  if (listen(server_fd, 3) < 0) {
     perror("listen");
     exit(EXIT_FAILURE);
   }
 
-  // Accepting incoming connections
-  if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0)
-  {
-    perror("accept");
-    exit(EXIT_FAILURE);
-  }
+  for (;;) {
 
-  // Reading data from the client
-  valread = read(new_socket, buffer, 1024);
-  printf("%s\n", buffer);
+    // Accepting incoming connections
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address,
+                             (socklen_t *)&addrlen)) < 0) {
+      perror("accept");
+      exit(EXIT_FAILURE);
+    }
+
+    // Reading data from the client
+    valread = read(new_socket, buffer, 1024);
+    printf("%s\n", buffer);
+  }
 
   /*
   // Sending data to the client
@@ -193,17 +194,23 @@ void vTcpReceiver(void *arg)
   */
 }
 
-void app_main(void)
-{
+void app_main(void) {
   // Local ESP32 serial monitor
   // Serial.begin(9600);
   // Inter board UART communication with pins 18 (rx) and 19 (tx)
   // IPC.begin(115200, SERIAL_8N1, 18, 19);
   /* Listen on port 1000 */
-  wifi_init_softap();
   // udp.begin(LISTEN_PORT);
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
 
   // FreeRTOS task initializer
   wifi_init_softap();
-  xTaskCreate(vControlListener, "Message control listener", 4096, NULL, 1, &listenHandle);
+  //xTaskCreate(vControlListener, "Message control listener", 4096, NULL, 10,
+  //            &listenHandle);
+  while(1) vTaskDelay(10);
 }
