@@ -1,5 +1,6 @@
 // #include "cam.h"
 // #include "control.h"
+#include "driver/uart.h"
 #include "esp_event.h"
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -31,7 +32,6 @@ TaskHandle_t listenTCPHandle = NULL;
 // WiFiUDP udp;
 static const char *vWifiTag = "wifi softAP";
 // Globals
-static char recv_char;
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
@@ -88,60 +88,51 @@ void wifi_init_softap(void) {
       EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 
-void vControlListener(void *arg) {
+void vControlListener(char *buf) {
   static const char *vcl = "vControlListener";
-  struct Message msg = {0};
-  switch (recv_char) {
-  case '1':
-    ESP_LOGI(vcl, "FWD_R");
-    msg = msg_gen(MOTOR, FWD_R);
-    break;
-  case '2':
-    ESP_LOGI(vcl, "FWD_L");
-    msg = msg_gen(MOTOR, FWD_L);
-    break;
-  case '3':
-    ESP_LOGI(vcl, "RWD_R");
-    msg = msg_gen(MOTOR, RWD_R);
-    break;
-  case '4':
-    ESP_LOGI(vcl, "RWD_L");
-    msg = msg_gen(MOTOR, RWD_L);
-    break;
-  case '5':
-    ESP_LOGI(vcl, "FWD");
-    msg = msg_gen(MOTOR, FWD_R | FWD_L);
-    break;
-  case '6':
-    ESP_LOGI(vcl, "BWD");
-    msg = msg_gen(MOTOR, RWD_R | RWD_L);
-    break;
-  case '7':
-    ESP_LOGI(vcl, "ALL");
-    msg = msg_gen(MOTOR, FWD_R | FWD_L | RWD_R | RWD_L);
-    break;
-  default:
-    ESP_LOGI(vcl, "None");
-    uint32_t raw = 0;
-    raw = msg_to_bytes(&msg);
-    for (int i = 0; i < 4; i++) {
-      uint8_t b = (raw >> (8 * i)) & 0xFF;
-      // Serial.printf("%x\n", b);
-      // IPC.write(b);
-    }
+  char *newline = strchr(buf, '\n');
+  if (newline) {
+    *newline = '\0';
   }
-  // wait to receive another command
-  // vTaskDelayUntil(&last, xFrequency);
+
+  char *endptr;
+  uint32_t cast = strtoul(buf, &endptr, 10);
+  if (*endptr != '\0')
+    ESP_LOGE(vcl, "Could not parse control message to known format.");
+  struct Message msg = {0};
+  uint8_t b[4] = {0};
+  for (int i = 0; i < 4; i++) {
+    b[i] = (cast >> (8 * i)) & 0xFF;
+  }
+  msg.header = b[3];
+  msg.cmd_ident = b[2];
+  msg.payload = b[1];
+  msg.end = b[0];
+  printf("Received: %x, %x, %x, %x\n", msg.header, msg.cmd_ident, msg.payload,
+         msg.end);
+
+  if ((msg.end != 0xFF) | (msg.header != 0xAA)) {
+    ESP_LOGE(vcl,
+             "Erroneous control message, header or sentinel are incorrect!");
+    return;
+  }
+
+  /* Forward control message to the Arduino board */
+  if (msg.cmd_ident == MOTOR) {
+    // TODO: implement IPC
+    printf("Received MOTOR command\n");
+    // for (int i = 3; i >= 0; i--) IPC.write(b[i]);
+    // nothing else we can do here
+    return;
+  }
 }
 
 // TODO: switch to FreeRTOS tcp implementation
 void vTcpReceiver(void *arg) {
   int server_fd, new_socket, valread;
   struct sockaddr_in address;
-  int opt = 1;
   int addrlen = sizeof(address);
   char buffer[1024] = {0};
-  // char *hello = "Hello from server";
 
   // Creating socket fd
   if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -149,12 +140,6 @@ void vTcpReceiver(void *arg) {
     exit(EXIT_FAILURE);
   }
 
-  /*   // Attaching socket to the port 6666
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt,
-                   sizeof(opt))) {
-      perror("setsockopt"); */
-  // exit(EXIT_FAILURE);
-  //}
   address.sin_family = AF_INET;
   address.sin_addr.s_addr = INADDR_ANY;
   address.sin_port = htons(TCP_PORT);
@@ -184,6 +169,8 @@ void vTcpReceiver(void *arg) {
       // Reading data from the client
       buffer[valread] = '\0'; // Ensure the buffer is null-terminated
       printf("%s\n", buffer);
+      // TODO: maybe parse
+      vControlListener(buffer);
       memset(buffer, 0, sizeof(buffer));
     }
   }
@@ -207,6 +194,18 @@ void app_main(void) {
     ret = nvs_flash_init();
   }
   ESP_ERROR_CHECK(ret);
+
+  // UART1 Peripheral initialization
+  const uart_port_t uart_num = UART_NUM_1;
+  uart_config_t uart_config = {
+      .baud_rate = 115200,
+      .data_bits = UART_DATA_8_BITS,
+      .parity = UART_PARITY_DISABLE,
+      .stop_bits = UART_STOP_BITS_1,
+      .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+  };
+  // Configure UART pins tx: 19, rx: 18
+  uart_set_pin(UART_NUM_1, 19, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
   // FreeRTOS task initializer
   wifi_init_softap();
