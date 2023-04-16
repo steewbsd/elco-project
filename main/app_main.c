@@ -1,16 +1,17 @@
-/* ESP32 master program: 
+/* ESP32 master program:
  * Check & forward TCP messages to Arduino sent from the remote client
- * Establish a WiFi SoftAP 
- * Control other stuff, camera stream 
-*/
+ * Establish a WiFi SoftAP
+ * Control other stuff, camera stream
+ */
 #include "driver/uart.h"
+#include "esp_camera.h"
 #include "esp_event.h"
+#include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_wifi.h"
 #include "message.h"
 #include "nvs_flash.h"
 
-#include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <lwip/sockets.h>
@@ -23,6 +24,24 @@
 #define EXAMPLE_ESP_WIFI_PASS "baconfrito5"
 #define EXAMPLE_ESP_WIFI_CHANNEL 6
 #define EXAMPLE_MAX_STA_CONN 4
+// Camera pins
+#define CAM_PIN_PWDN -1  // power down is not used
+#define CAM_PIN_RESET -1 // software reset will be performed
+#define CAM_PIN_XCLK 21
+#define CAM_PIN_SIOD 26
+#define CAM_PIN_SIOC 27
+
+#define CAM_PIN_D7 35
+#define CAM_PIN_D6 34
+#define CAM_PIN_D5 39
+#define CAM_PIN_D4 36
+#define CAM_PIN_D3 19
+#define CAM_PIN_D2 18
+#define CAM_PIN_D1 5
+#define CAM_PIN_D0 4
+#define CAM_PIN_VSYNC 25
+#define CAM_PIN_HREF 23
+#define CAM_PIN_PCLK 22
 
 #define TCP_PORT 6666
 
@@ -87,8 +106,67 @@ void wifi_init_softap(void) {
       EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 
+esp_err_t xCameraConfig() {
+  static const char *pcCamTag = "Camera Task";
+  static camera_config_t camera_config = {
+      .pin_pwdn = CAM_PIN_PWDN,
+      .pin_reset = CAM_PIN_RESET,
+      .pin_xclk = CAM_PIN_XCLK,
+      .pin_sscb_sda = CAM_PIN_SIOD,
+      .pin_sscb_scl = CAM_PIN_SIOC,
+
+      .pin_d7 = CAM_PIN_D7,
+      .pin_d6 = CAM_PIN_D6,
+      .pin_d5 = CAM_PIN_D5,
+      .pin_d4 = CAM_PIN_D4,
+      .pin_d3 = CAM_PIN_D3,
+      .pin_d2 = CAM_PIN_D2,
+      .pin_d1 = CAM_PIN_D1,
+      .pin_d0 = CAM_PIN_D0,
+      .pin_vsync = CAM_PIN_VSYNC,
+      .pin_href = CAM_PIN_HREF,
+      .pin_pclk = CAM_PIN_PCLK,
+
+      // XCLK 20MHz or 10MHz for OV2640 double FPS (Experimental)
+      .xclk_freq_hz = 20000000,
+      .ledc_timer = LEDC_TIMER_0,
+      .ledc_channel = LEDC_CHANNEL_0,
+
+      .pixel_format = PIXFORMAT_RGB565, // YUV422,GRAYSCALE,RGB565,JPEG
+      .frame_size = FRAMESIZE_QVGA, // QQVGA-UXGA Do not use sizes above QVGA
+                                    // when not JPEG
+
+      .jpeg_quality = 12, // 0-63 lower number means higher quality
+      .fb_count = 1, // if more than one, i2c runs in continuous mode. Use only
+                     // with JPEG
+      .grab_mode = CAMERA_GRAB_WHEN_EMPTY,
+  };
+
+  // initialize the camera
+  esp_err_t err = esp_camera_init(&camera_config);
+  if (err != ESP_OK) {
+    ESP_LOGE(pcCamTag, "Camera Init Failed");
+    return ESP_FAIL;
+  }
+  return ESP_OK;
+}
+
+void vCameraTask(void *arg) {
+  static const char *pcCamTag = "Camera Task";
+  for (;;) {
+    ESP_LOGI(pcCamTag, "Taking picture...");
+    camera_fb_t *pic = esp_camera_fb_get();
+
+    // use pic->buf to access the image
+    ESP_LOGI(pcCamTag, "Picture taken! Its size was: %zu bytes", pic->len);
+    esp_camera_fb_return(pic);
+
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+  }
+}
+
 void vControlListener(char *buf) {
-  static const char *vcl = "vControlListener";
+  static const char *pcVcl = "vControlListener";
   char *newline = strchr(buf, '\n');
   if (newline) {
     *newline = '\0';
@@ -97,7 +175,7 @@ void vControlListener(char *buf) {
   char *endptr;
   uint32_t cast = strtoul(buf, &endptr, 10);
   if (*endptr != '\0')
-    ESP_LOGE(vcl, "Could not parse control message to known format.");
+    ESP_LOGE(pcVcl, "Could not parse control message to known format.");
   struct Message msg = {0};
   uint8_t b[4] = {0};
   for (int i = 0; i < 4; i++) {
@@ -111,7 +189,7 @@ void vControlListener(char *buf) {
          msg.end);
 
   if ((msg.end != 0xFF) | (msg.header != 0xAA)) {
-    ESP_LOGE(vcl,
+    ESP_LOGE(pcVcl,
              "Erroneous control message, header or sentinel are incorrect!");
     return;
   }
@@ -175,7 +253,7 @@ void vTcpReceiver(void *arg) {
   }
 }
 
-void app_main(void) {
+void app_main() {
   /* ESP32 nvs */
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
@@ -192,6 +270,8 @@ void app_main(void) {
       .parity = UART_PARITY_DISABLE,
       .stop_bits = UART_STOP_BITS_1,
       .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+      .source_clk = UART_SCLK_DEFAULT,
+      .rx_flow_ctrl_thresh = 0,
   };
 
   // Configure UART pins tx: 19, rx: 18
@@ -199,9 +279,15 @@ void app_main(void) {
   ESP_ERROR_CHECK(uart_param_config(IPC, &uart_config));
 
   wifi_init_softap();
+  esp_err_t cam_err = xCameraConfig();
 
   // FreeRTOS task initializer
   xTaskCreate(vTcpReceiver, "TCP Receiver", 8192, NULL, 2, &listenTCPHandle);
+  // Only create camera task if we could initialize it
+  if (cam_err == ESP_OK) {
+    xTaskCreate(vCameraTask, "Camera task", 8192, NULL, 2, NULL);
+  }
+
   while (1)
     vTaskDelay(10);
 }
