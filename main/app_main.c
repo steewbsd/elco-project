@@ -25,9 +25,9 @@
 #define EXAMPLE_ESP_WIFI_CHANNEL 6
 #define EXAMPLE_MAX_STA_CONN 4
 // Camera pins
-#define CAM_PIN_PWDN -1  // power down is not used
-#define CAM_PIN_RESET -1 // software reset will be performed
-#define CAM_PIN_XCLK 21
+#define CAM_PIN_PWDN -1 // power down is not used
+#define CAM_PIN_RESET 2 // software reset will be performed
+#define CAM_PIN_XCLK 0
 #define CAM_PIN_SIOD 26
 #define CAM_PIN_SIOC 27
 
@@ -49,7 +49,7 @@ TaskHandle_t listenHandle = NULL;
 TaskHandle_t listenTCPHandle = NULL;
 // globals
 static const char *vWifiTag = "wifi softAP";
-static const uart_port_t IPC = UART_NUM_1;
+static const uart_port_t IPC = UART_NUM_2;
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
@@ -198,7 +198,7 @@ void vControlListener(char *buf) {
   if (msg.cmd_ident == MOTOR) {
     printf("Received MOTOR command\n");
     for (int i = 3; i >= 0; i--)
-      uart_write_bytes(IPC, b[i], sizeof(uint8_t));
+      uart_write_bytes(IPC, "CAFE", 5);
     // nothing else we can do here
     return;
   }
@@ -275,12 +275,12 @@ void app_main() {
   };
 
   // Configure UART pins tx: 19, rx: 18
-  uart_set_pin(UART_NUM_1, 19, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  uart_driver_install(IPC, BUFSIZ * 2, 0, 0, NULL, 0);
   ESP_ERROR_CHECK(uart_param_config(IPC, &uart_config));
+  uart_set_pin(IPC, 19, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
   wifi_init_softap();
   esp_err_t cam_err = xCameraConfig();
-
   // FreeRTOS task initializer
   xTaskCreate(vTcpReceiver, "TCP Receiver", 8192, NULL, 2, &listenTCPHandle);
   // Only create camera task if we could initialize it
