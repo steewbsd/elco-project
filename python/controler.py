@@ -45,9 +45,6 @@ def callbackDown(event):
 def callbackRight(event):
     label["text"] = "You pressed Right"
     print("Right")
-'''def callbackds(event):
-    label["text"] = "You pressed d and s"
-    print("ds")'''
 
 #Asignamos función a las teclas
 app.bind('<q>', callbackq)
@@ -62,7 +59,6 @@ app.bind('<Up>', callbackUp)
 app.bind('<Left>', callbackLeft)
 app.bind('<Down>', callbackDown)
 app.bind('<Right>', callbackRight)
-#app.bind('<d>', callbackds)
 
 #
 label = tk.Label(app, text="")
