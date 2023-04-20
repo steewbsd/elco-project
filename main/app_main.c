@@ -15,6 +15,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <lwip/sockets.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,9 +44,9 @@
 #define CAM_PIN_HREF 23
 #define CAM_PIN_PCLK 22
  */
-#define CAM_PIN_PWDN -1 // power down is not used
-#define CAM_PIN_RESET 2 // software reset will be performed
-#define CAM_PIN_XCLK 21
+#define CAM_PIN_PWDN 32  // power down is not used
+#define CAM_PIN_RESET -1 // software reset will be performed
+#define CAM_PIN_XCLK 0
 #define CAM_PIN_SIOD 26
 #define CAM_PIN_SIOC 27
 
@@ -53,22 +54,28 @@
 #define CAM_PIN_D6 34
 #define CAM_PIN_D5 39
 #define CAM_PIN_D4 36
-#define CAM_PIN_D3 19
-#define CAM_PIN_D2 18
-#define CAM_PIN_D1 5
-#define CAM_PIN_D0 4
+#define CAM_PIN_D3 21
+#define CAM_PIN_D2 19
+#define CAM_PIN_D1 18
+#define CAM_PIN_D0 5
 #define CAM_PIN_VSYNC 25
 #define CAM_PIN_HREF 23
 #define CAM_PIN_PCLK 22
 
 #define TCP_PORT 6666
 #define UDP_PORT 6665
+#define FPS 60
+#define UDP_RECONNECT_MS 1000 // 1 second
 
 TaskHandle_t listenHandle = NULL;
 TaskHandle_t listenTCPHandle = NULL;
 // globals
 static const char *vWifiTag = "wifi softAP";
 static const uart_port_t IPC = UART_NUM_2;
+// camera buffer
+static size_t _jpg_buf_len = 0;
+static uint8_t *_jpg_buf = NULL;
+static int udp_send_socket = -1;
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
@@ -172,87 +179,63 @@ esp_err_t xCameraConfig() {
 void vCameraTask(void *arg) {
   static const char *pcCamTag = "Camera Task";
   // compressed JPEG buffer
-  size_t _jpg_buf_len = 0;
-  uint8_t *_jpg_buf = NULL;
 
   for (;;) {
-    ESP_LOGI(pcCamTag, "Taking picture...");
-    camera_fb_t *pic = esp_camera_fb_get();
+    /*  ESP_LOGI(pcCamTag, "Taking picture...");
+     camera_fb_t *pic = esp_camera_fb_get();
 
-    // use pic->buf to access the image
-    ESP_LOGI(pcCamTag, "Picture taken! Its size was: %zu bytes", pic->len);
-    // framebuffer compression to JPEG for reduced network traffic
-    frame2jpg(pic, 80, &_jpg_buf, &_jpg_buf_len);
-    esp_camera_fb_return(pic);
+     // use pic->buf to access the image
+     ESP_LOGI(pcCamTag, "Picture taken! Its size was: %zu bytes", pic->len);
+     // framebuffer compression to JPEG for reduced network traffic
+     frame2jpg(pic, 80, &_jpg_buf, &_jpg_buf_len);
+     esp_camera_fb_return(pic);
 
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+     // Delay according to frame rate (FPS) */
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
 
 static void vUdpServer(void *pvParameters) {
-  char rx_buffer[128];
-  char addr_str[128];
-  int addr_family = (int)pvParameters;
-  int ip_protocol = 0;
-  static const char *TAG = "UDP Server receiver";
-  struct sockaddr_in dest_addr;
+  static const char * vUdp = "UDP Client";
+  char *message = "Hello Server";
+  int sockfd;
+  struct sockaddr_in servaddr;
 
-  dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  dest_addr.sin_family = AF_INET;
-  dest_addr.sin_port = htons(UDP_PORT);
+  // clear servaddr
+  bzero(&servaddr, sizeof(servaddr));
+  servaddr.sin_addr.s_addr = inet_addr("192.168.4.2");
+  servaddr.sin_port = htons(UDP_PORT);
+  servaddr.sin_family = AF_INET;
 
-  int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-  if (sock < 0) {
-    ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
-    return;
-  }
-  ESP_LOGI(TAG, "Socket created");
-  // Set timeout
-  struct timeval timeout;
-  timeout.tv_sec = 10;
-  timeout.tv_usec = 0;
-  setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
+  // create datagram socket
+  sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  if (sockfd < 0)
+    ESP_LOGE(vUdp, "Could not create UDP socket");
 
-  int err = bind(sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
-  if (err < 0) {
-    ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
-  }
-  ESP_LOGI(TAG, "Socket bound, port %d", UDP_PORT);
-
-  struct sockaddr_storage source_addr;
-  socklen_t socklen = sizeof(source_addr);
+  bool connected = false;
 
   for (;;) {
-    ESP_LOGI(TAG, "Waiting for data");
-    int len = recvfrom(sock, rx_buffer, sizeof(rx_buffer) - 1, 0,
-                       (struct sockaddr *)&source_addr, &socklen);
-    // Error occurred during receiving
-    if (len < 0) {
-      ESP_LOGE(TAG, "recvfrom failed: errno %d", errno);
-    }
-    // Data received
-    else {
-      // Get the sender's ip address as string
-      inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str,
-                  sizeof(addr_str) - 1);
-
-      rx_buffer[len] =
-          0; // Null-terminate whatever we received and treat like a string...
-      ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
-      ESP_LOGI(TAG, "%s", rx_buffer);
-
-      int err = sendto(sock, rx_buffer, len, 0, (struct sockaddr *)&source_addr,
-                       sizeof(source_addr));
-      if (err < 0) {
-        ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+    // connect to server
+    if (connected == false) {
+      if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+        ESP_LOGE(vUdp, "UDP connection failed, waiting... %d", errno);
+        vTaskDelay(UDP_RECONNECT_MS / portTICK_PERIOD_MS);
+        continue;
+      } else {
+        ESP_LOGI(vUdp, "Connected to UDP server");
+        connected = true;
       }
     }
-  }
 
-  if (sock != -1) {
-    ESP_LOGE(TAG, "Shutting down socket and restarting...");
-    shutdown(sock, 0);
-    close(sock);
+    // request to send datagram
+    int err = send(sockfd, message, 13, 0);
+    if (err < 0) {
+      ESP_LOGE(vUdp, "Sending failed: %d", errno);
+      vTaskDelay(UDP_RECONNECT_MS / portTICK_PERIOD_MS);
+    }
+
+    // close the descriptor
+    // close(sockfd);
   }
 }
 
@@ -373,11 +356,12 @@ void app_main() {
   wifi_init_softap();
   esp_err_t cam_err = xCameraConfig();
   // FreeRTOS task initializer
+  // maximum priority for control messages
   xTaskCreate(vTcpReceiver, "TCP Receiver", 8192, NULL, 9, &listenTCPHandle);
-  xTaskCreate(vUdpServer, "UDP Server", 8192, NULL, 1, NULL);
+  xTaskCreate(vUdpServer, "UDP Server", 8192, NULL, 2, NULL);
   // Only create camera task if we could initialize it
   if (cam_err == ESP_OK) {
-    xTaskCreate(vCameraTask, "Camera task", 8192, NULL, 8, NULL);
+    xTaskCreate(vCameraTask, "Camera task", 8192, NULL, 3, NULL);
   }
 
   while (1)
