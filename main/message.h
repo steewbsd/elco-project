@@ -27,7 +27,7 @@ enum CMD_MOTOR_IDENT {
     RWD_L = 0x08,
     /* These 4 values represent moving the weel backwards */
     // Forward wheel drive (Right) - go backwards
-    FWD_R_BACK = 0x010,
+    FWD_R_BACK = 0x10,
     // Forward wheel drive (Left) - go backwards
     FWD_L_BACK = 0x20,
     // Rear wheel drive (Right) - go backwards
