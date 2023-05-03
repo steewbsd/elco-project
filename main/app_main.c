@@ -71,7 +71,7 @@ TaskHandle_t listenHandle = NULL;
 TaskHandle_t listenTCPHandle = NULL;
 // globals
 static const char *vWifiTag = "wifi softAP";
-static const uart_port_t IPC = UART_NUM_2;
+static const uart_port_t IPC = UART_NUM_1;
 // camera buffer
 static size_t _jpg_buf_len = 0;
 static uint8_t *_jpg_buf = NULL;
@@ -196,7 +196,7 @@ void vCameraTask(void *arg) {
 }
 
 static void vUdpServer(void *pvParameters) {
-  static const char * vUdp = "UDP Client";
+  static const char *vUdp = "UDP Client";
   char *message = "Hello Server";
   int sockfd;
   struct sockaddr_in servaddr;
@@ -218,7 +218,7 @@ static void vUdpServer(void *pvParameters) {
     // connect to server
     if (connected == false) {
       if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
-        ESP_LOGE(vUdp, "UDP connection failed, waiting... %d", errno);
+        // ESP_LOGE(vUdp, "UDP connection failed, waiting... %d", errno);
         vTaskDelay(UDP_RECONNECT_MS / portTICK_PERIOD_MS);
         continue;
       } else {
@@ -271,8 +271,9 @@ void vControlListener(char *buf) {
   /* Forward control message to the Arduino board */
   if (msg.cmd_ident == MOTOR) {
     printf("Received MOTOR command\n");
-    for (int i = 3; i >= 0; i--)
-      uart_write_bytes(IPC, "CAFE", 5);
+    // for (int i = 0; i < )
+    uart_write_bytes(IPC, (const char *) &msg.payload, sizeof msg.payload);
+    // uart_write_bytes(IPC, "CAFE", 5);
     // nothing else we can do here
     return;
   }
@@ -321,6 +322,8 @@ void vTcpReceiver(void *arg) {
       buffer[valread] = '\0'; // Ensure the buffer is null-terminated
       printf("%s\n", buffer);
       // TODO: maybe parse
+      // if (valread > 32)
+      //  buffer >>= (valread - 32);
       vControlListener(buffer);
       memset(buffer, 0, sizeof(buffer));
     }
@@ -339,19 +342,20 @@ void app_main() {
 
   // UART1 Peripheral initialization
   uart_config_t uart_config = {
-      .baud_rate = 115200,
+      .baud_rate = 9600,
       .data_bits = UART_DATA_8_BITS,
       .parity = UART_PARITY_DISABLE,
       .stop_bits = UART_STOP_BITS_1,
       .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
       .source_clk = UART_SCLK_DEFAULT,
-      .rx_flow_ctrl_thresh = 0,
+      // .rx_flow_ctrl_thresh = 0,
   };
 
   // Configure UART pins tx: 19, rx: 18
-  uart_driver_install(IPC, BUFSIZ * 2, 0, 0, NULL, 0);
+
   ESP_ERROR_CHECK(uart_param_config(IPC, &uart_config));
-  uart_set_pin(IPC, 19, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  ESP_ERROR_CHECK(uart_set_pin(IPC, 4, 5, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+  ESP_ERROR_CHECK(uart_driver_install(IPC, BUFSIZ * 2, BUFSIZ * 2, 0, NULL, 0));
 
   wifi_init_softap();
   esp_err_t cam_err = xCameraConfig();

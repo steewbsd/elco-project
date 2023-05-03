@@ -17,6 +17,11 @@ SoftwareSerial interboard(2, 10);
 byte recv = 0;
 uint32_t control = 0;
 uint32_t last_control = 0;
+
+// Ultrasound sensor
+const int ping = 11;
+const int echo = 12;
+
 Message ctrl_msg = {0};
 
 void bytes_to_msg(uint32_t bytes) {
@@ -41,10 +46,17 @@ void setup() {
   motor_FWD_L.run(RELEASE);
   motor_RWD_R.run(RELEASE);
   motor_RWD_L.run(RELEASE);
+
+  pinMode(ping, OUTPUT);
+  pinMode(echo, INPUT);
 }
 
 void loop() {
   int i = 0;
+  // check ultrasound
+  analogWrite(ping, 127);
+  long soundPulse = pulseIn(echo, HIGH);
+  Serial.println(soundPulse / 29 / 2);
 
   // Serial.print("tick");
   while (interboard.available() > 0) {
@@ -103,5 +115,5 @@ void loop() {
     for (int i = 0; i < 4; i++)
       motors[i].run(RELEASE);
   }
-  delay(1000);
+  delay(100);
 }
