@@ -9,7 +9,7 @@ import imutils
 
 def iniciar():
     global cap
-    cap = cv2.VideoCapture('udp://@192.168.4.1:6666')
+    cap = cv2.VideoCapture('udp://@192.168.4.2:6667')
     visualizar()
 
 def visualizar():
@@ -21,11 +21,11 @@ def visualizar():
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             im = Image.fromarray(frame)
             img = ImageTk.PhotoImage(image=im)
-            lblVideo.configure(image=img)
-            lblVideo.image = img
-            lblVideo.after(10, visualizar)
+            label.configure(image=img)
+            label.image = img
+            label.after(10, visualizar)
         else:
-            lblVideo.image = ""
+            label.image = ""
             cap.release()
 
 def finalizar():
@@ -36,18 +36,17 @@ cap = None
 
 # Define la app
 app = tk.Tk()
-app.geometry("640x480")
-
-'''btnIniciar = tk.Button(app, text="Iniciar", width=45, command=iniciar)
-btnIniciar.grid(column=0, row=0, padx=5, pady=5)
-
-btnFinalizar = tk.Button(app, text="Finalizar", width=45, command=finalizar)
-btnFinalizar.grid(column=1, row=0, padx=5, pady=5)
-
-lblVideo = tk.Label(app)
-lblVideo.grid(column=0, row=1, columnspan=2)'''
 
 now = time.time()
+
+# Crear un socket UDP
+UDP_IP = "192.168.4.2"  # Dirección IP de destino
+UDP_PORT = 6667  # Puerto de destino
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind((UDP_IP, UDP_PORT))
+
+# Capturar el flujo de vídeo desde el socket UDP
+cap = cv2.VideoCapture("udp://{}:{}".format(UDP_IP, UDP_PORT))
 
 # Dirección IP y puerto del servidor TCP
 IP = '192.168.4.1'
@@ -401,11 +400,21 @@ def callback_release(event):
     except:
         label["text"] = key_presses
 
+
+btnIniciar = tk.Button(app, text="Iniciar", width=45, command=iniciar)
+btnIniciar.grid(column=0, row=0, padx=5, pady=5)
+
+btnFinalizar = tk.Button(app, text="Finalizar", width=45, command=finalizar)
+btnFinalizar.grid(column=1, row=0, padx=5, pady=5)
+
+'''label = tk.Label(app)
+label.grid(column=0, row=1, columnspan=2)'''
+
 # Bindings for key press & release
 app.bind("<KeyPress>", callback_press)
 app.bind("<KeyRelease>", callback_release)
 label = tk.Label(app, text="Press any key")
-label.pack()
+label.grid(column=0, row=1, columnspan=2)
 
 # Bucle principal
 app.mainloop()
