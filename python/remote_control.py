@@ -1,11 +1,53 @@
 # Imports
 import tkinter as tk
+from PIL import Image
+from PIL import ImageTk
 import socket
 import time
+import cv2
+import imutils
+
+def iniciar():
+    global cap
+    cap = cv2.VideoCapture('udp://@192.168.4.1:6666')
+    visualizar()
+
+def visualizar():
+    global cap
+    if cap is not None:
+        ret, frame = cap.read()
+        if ret == True:
+            frame = imutils.resize(frame, width=640)
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            im = Image.fromarray(frame)
+            img = ImageTk.PhotoImage(image=im)
+            lblVideo.configure(image=img)
+            lblVideo.image = img
+            lblVideo.after(10, visualizar)
+        else:
+            lblVideo.image = ""
+            cap.release()
+
+def finalizar():
+    global cap
+    cap.release()
+
+cap = None
 
 # Define la app
 app = tk.Tk()
-app.geometry("200x100")
+app.geometry("640x480")
+
+'''btnIniciar = tk.Button(app, text="Iniciar", width=45, command=iniciar)
+btnIniciar.grid(column=0, row=0, padx=5, pady=5)
+
+btnFinalizar = tk.Button(app, text="Finalizar", width=45, command=finalizar)
+btnFinalizar.grid(column=1, row=0, padx=5, pady=5)
+
+lblVideo = tk.Label(app)
+lblVideo.grid(column=0, row=1, columnspan=2)'''
+
+now = time.time()
 
 # Dirección IP y puerto del servidor TCP
 IP = '192.168.4.1'
@@ -273,15 +315,15 @@ def wheels_control(list):
     elif 'a' in key_presses:
         # Acción cuando se ha pulsado la tecla a
         print("Mover hacia la izquierda")
-        #mov_izq()
+        mov_izq()
     elif 's' in key_presses:
         # Acción cuando se ha pulsado la tecla s
         print("Mover hacia atrás")
-        #mov_atras()
+        mov_atras()
     elif 'd' in key_presses:
         # Acción cuando se ha pulsado la tecla d
         print("Mover hacia la derecha")
-        #mov_der()
+        mov_der()
 
 # Si no se cumple ninguna de las condiciones se para
     
@@ -340,16 +382,14 @@ def camera_control(list):
 def callback_press(event):
     try:
         key_presses.index(event.keysym)
-    except:
+    except:    
         key_presses.append(event.keysym)
         label["text"] = key_presses
         print(f"After add: {key_presses}")
         wheels_control(key_presses)
         camera_control(key_presses)
-        time.sleep(0.01)
-        
+    
        
-
 # Key callback for button release
 def callback_release(event):
     try:
@@ -358,7 +398,6 @@ def callback_release(event):
         label["text"] = key_presses
         wheels_control(key_presses)
         camera_control(key_presses)
-        time.sleep(0.01)
     except:
         label["text"] = key_presses
 
@@ -373,5 +412,3 @@ app.mainloop()
 
 # Cerrar la conexión TCP con el servidor
 cliente.close()
-
-# Cosas de envio TCP
