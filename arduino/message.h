@@ -12,7 +12,8 @@ struct Message {
 enum CMD_IDENT {
     MOTOR = 0x01,
     SENSOR = 0x02,
-    ACK = 0x03,
+    ACK = 0x04,
+    CAMARA = 0x08,
 };
 
 enum CMD_MOTOR_IDENT {
@@ -27,13 +28,25 @@ enum CMD_MOTOR_IDENT {
     RWD_L = 0x08,
     /* These 4 values represent moving the weel backwards */
     // Forward wheel drive (Right) - go backwards
-    FWD_R_BACK = 0x010,
+    FWD_R_BACK = 0x10,
     // Forward wheel drive (Left) - go backwards
     FWD_L_BACK = 0x20,
     // Rear wheel drive (Right) - go backwards
     RWD_R_BACK = 0x40,
     // Rear wheel drive (Left) - go backwards
     RWD_L_BACK = 0x80,
+};
+
+enum CMD_CAMERA_IDENT {
+    /* These 4 values represent moving the camera */
+    // Right
+    FWD_R = 0x01,
+    // Left
+    FWD_L = 0x02,
+    // Up
+    RWD_R = 0x04,
+    // Down
+    RWD_L = 0x08,
 };
 
 struct Message msg_gen (enum CMD_IDENT ident, uint8_t payload);
