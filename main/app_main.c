@@ -63,7 +63,7 @@
 #define CAM_PIN_PCLK 22
 
 #define TCP_PORT 6666
-#define UDP_PORT 6665
+#define UDP_PORT 6667
 #define FPS 60
 #define UDP_RECONNECT_MS 1000 // 1 second
 
@@ -181,17 +181,20 @@ void vCameraTask(void *arg) {
   // compressed JPEG buffer
 
   for (;;) {
-    /*  ESP_LOGI(pcCamTag, "Taking picture...");
-     camera_fb_t *pic = esp_camera_fb_get();
+    ESP_LOGI(pcCamTag, "Taking picture...");
+    camera_fb_t *pic = esp_camera_fb_get();
 
-     // use pic->buf to access the image
-     ESP_LOGI(pcCamTag, "Picture taken! Its size was: %zu bytes", pic->len);
-     // framebuffer compression to JPEG for reduced network traffic
-     frame2jpg(pic, 80, &_jpg_buf, &_jpg_buf_len);
-     esp_camera_fb_return(pic);
+    // use pic->buf to access the image
+    ESP_LOGI(pcCamTag, "Picture taken! Its size was: %zu bytes", pic->len);
+    // framebuffer compression to JPEG for reduced network traffic
+    // frame2jpg(pic, 80, &_jpg_buf, &_jpg_buf_len);
+    uint8_t *buf = NULL;
+    size_t buf_len = 0;
+    bool converted = frame2bmp(pic, &_jpg_buf, &_jpg_buf_len);
+    esp_camera_fb_return(pic);
 
-     // Delay according to frame rate (FPS) */
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    // Delay according to frame rate (FPS)
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
   }
 }
 
@@ -216,7 +219,7 @@ static void vUdpServer(void *pvParameters) {
 
   for (;;) {
     // connect to server
-    if (connected == false) {
+   /*  if (connected == false) {
       if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
         // ESP_LOGE(vUdp, "UDP connection failed, waiting... %d", errno);
         vTaskDelay(UDP_RECONNECT_MS / portTICK_PERIOD_MS);
@@ -225,10 +228,10 @@ static void vUdpServer(void *pvParameters) {
         ESP_LOGI(vUdp, "Connected to UDP server");
         connected = true;
       }
-    }
+    } */
 
     // request to send datagram
-    int err = send(sockfd, message, 13, 0);
+    int err = sendto(sockfd, _jpg_buf, _jpg_buf_len, 0, &servaddr, sizeof(servaddr));
     if (err < 0) {
       ESP_LOGE(vUdp, "Sending failed: %d", errno);
       vTaskDelay(UDP_RECONNECT_MS / portTICK_PERIOD_MS);
@@ -272,7 +275,7 @@ void vControlListener(char *buf) {
   if (msg.cmd_ident == MOTOR) {
     printf("Received MOTOR command\n");
     // for (int i = 0; i < )
-    uart_write_bytes(IPC, (const char *) &msg.payload, sizeof msg.payload);
+    uart_write_bytes(IPC, (const char *)&cast, sizeof cast);
     // uart_write_bytes(IPC, "CAFE", 5);
     // nothing else we can do here
     return;
@@ -320,12 +323,24 @@ void vTcpReceiver(void *arg) {
     while ((valread = read(new_socket, buffer, 1024)) > 0) {
       // Reading data from the client
       buffer[valread] = '\0'; // Ensure the buffer is null-terminated
+      printf("Read: %d\n", valread);
       printf("%s\n", buffer);
       // TODO: maybe parse
-      // if (valread > 32)
-      //  buffer >>= (valread - 32);
-      vControlListener(buffer);
+      if (valread > 10) {
+        char max_msg_allowed[10] = {0};
+        int i = 0;
+        // copy last 32 numbers to the array
+        for (int rev_index = valread; rev_index >= valread - 10; rev_index--) {
+          printf("char: %c\n", buffer[rev_index]);
+          max_msg_allowed[i++] = buffer[rev_index];
+        }
+        max_msg_allowed[i] = 0;
+        vControlListener(max_msg_allowed);
+        printf("Split: %s\n", max_msg_allowed);
+      } else
+        vControlListener(buffer);
       memset(buffer, 0, sizeof(buffer));
+      // close(new_socket);
     }
   }
 }
@@ -354,7 +369,8 @@ void app_main() {
   // Configure UART pins tx: 19, rx: 18
 
   ESP_ERROR_CHECK(uart_param_config(IPC, &uart_config));
-  ESP_ERROR_CHECK(uart_set_pin(IPC, 4, 5, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+  ESP_ERROR_CHECK(
+      uart_set_pin(IPC, 4, 5, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
   ESP_ERROR_CHECK(uart_driver_install(IPC, BUFSIZ * 2, BUFSIZ * 2, 0, NULL, 0));
 
   wifi_init_softap();
