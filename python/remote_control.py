@@ -4,8 +4,8 @@ from PIL import Image
 from PIL import ImageTk
 import socket
 import time
-import cv2
-import imutils
+#import cv2
+#import imutils
 
 # Define la app
 app = tk.Tk()

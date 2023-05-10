@@ -15,6 +15,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <lwip/sockets.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,8 +26,8 @@
 #define EXAMPLE_ESP_WIFI_CHANNEL 6
 #define EXAMPLE_MAX_STA_CONN 4
 // Camera pins
-#define CAM_PIN_PWDN -1 // power down is not used
-#define CAM_PIN_RESET 2 // software reset will be performed
+/* #define CAM_PIN_PWDN 32 // power down is not used
+#define CAM_PIN_RESET -1 // software reset will be performed
 #define CAM_PIN_XCLK 0
 #define CAM_PIN_SIOD 26
 #define CAM_PIN_SIOC 27
@@ -35,21 +36,46 @@
 #define CAM_PIN_D6 34
 #define CAM_PIN_D5 39
 #define CAM_PIN_D4 36
-#define CAM_PIN_D3 19
-#define CAM_PIN_D2 18
-#define CAM_PIN_D1 5
-#define CAM_PIN_D0 4
+#define CAM_PIN_D3 21
+#define CAM_PIN_D2 19
+#define CAM_PIN_D1 18
+#define CAM_PIN_D0 5
+#define CAM_PIN_VSYNC 25
+#define CAM_PIN_HREF 23
+#define CAM_PIN_PCLK 22
+ */
+#define CAM_PIN_PWDN 32  // power down is not used
+#define CAM_PIN_RESET -1 // software reset will be performed
+#define CAM_PIN_XCLK 0
+#define CAM_PIN_SIOD 26
+#define CAM_PIN_SIOC 27
+
+#define CAM_PIN_D7 35
+#define CAM_PIN_D6 34
+#define CAM_PIN_D5 39
+#define CAM_PIN_D4 36
+#define CAM_PIN_D3 21
+#define CAM_PIN_D2 19
+#define CAM_PIN_D1 18
+#define CAM_PIN_D0 5
 #define CAM_PIN_VSYNC 25
 #define CAM_PIN_HREF 23
 #define CAM_PIN_PCLK 22
 
 #define TCP_PORT 6666
+#define UDP_PORT 6667
+#define FPS 60
+#define UDP_RECONNECT_MS 1000 // 1 second
 
 TaskHandle_t listenHandle = NULL;
 TaskHandle_t listenTCPHandle = NULL;
 // globals
 static const char *vWifiTag = "wifi softAP";
-static const uart_port_t IPC = UART_NUM_2;
+static const uart_port_t IPC = UART_NUM_1;
+// camera buffer
+static size_t _jpg_buf_len = 0;
+static uint8_t *_jpg_buf = NULL;
+static int udp_send_socket = -1;
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data) {
@@ -114,7 +140,6 @@ esp_err_t xCameraConfig() {
       .pin_xclk = CAM_PIN_XCLK,
       .pin_sscb_sda = CAM_PIN_SIOD,
       .pin_sscb_scl = CAM_PIN_SIOC,
-
       .pin_d7 = CAM_PIN_D7,
       .pin_d6 = CAM_PIN_D6,
       .pin_d5 = CAM_PIN_D5,
@@ -153,15 +178,67 @@ esp_err_t xCameraConfig() {
 
 void vCameraTask(void *arg) {
   static const char *pcCamTag = "Camera Task";
+  // compressed JPEG buffer
+
   for (;;) {
     ESP_LOGI(pcCamTag, "Taking picture...");
     camera_fb_t *pic = esp_camera_fb_get();
 
     // use pic->buf to access the image
     ESP_LOGI(pcCamTag, "Picture taken! Its size was: %zu bytes", pic->len);
+    // framebuffer compression to JPEG for reduced network traffic
+    // frame2jpg(pic, 80, &_jpg_buf, &_jpg_buf_len);
+    uint8_t *buf = NULL;
+    size_t buf_len = 0;
+    bool converted = frame2bmp(pic, &_jpg_buf, &_jpg_buf_len);
     esp_camera_fb_return(pic);
 
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    // Delay according to frame rate (FPS)
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+  }
+}
+
+static void vUdpServer(void *pvParameters) {
+  static const char *vUdp = "UDP Client";
+  char *message = "Hello Server";
+  int sockfd;
+  struct sockaddr_in servaddr;
+
+  // clear servaddr
+  bzero(&servaddr, sizeof(servaddr));
+  servaddr.sin_addr.s_addr = inet_addr("192.168.4.2");
+  servaddr.sin_port = htons(UDP_PORT);
+  servaddr.sin_family = AF_INET;
+
+  // create datagram socket
+  sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  if (sockfd < 0)
+    ESP_LOGE(vUdp, "Could not create UDP socket");
+
+  bool connected = false;
+
+  for (;;) {
+    // connect to server
+   /*  if (connected == false) {
+      if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+        // ESP_LOGE(vUdp, "UDP connection failed, waiting... %d", errno);
+        vTaskDelay(UDP_RECONNECT_MS / portTICK_PERIOD_MS);
+        continue;
+      } else {
+        ESP_LOGI(vUdp, "Connected to UDP server");
+        connected = true;
+      }
+    } */
+
+    // request to send datagram
+    int err = sendto(sockfd, _jpg_buf, _jpg_buf_len, 0, &servaddr, sizeof(servaddr));
+    if (err < 0) {
+      ESP_LOGE(vUdp, "Sending failed: %d", errno);
+      vTaskDelay(UDP_RECONNECT_MS / portTICK_PERIOD_MS);
+    }
+
+    // close the descriptor
+    // close(sockfd);
   }
 }
 
@@ -197,8 +274,9 @@ void vControlListener(char *buf) {
   /* Forward control message to the Arduino board */
   if (msg.cmd_ident == MOTOR) {
     printf("Received MOTOR command\n");
-    for (int i = 3; i >= 0; i--)
-      uart_write_bytes(IPC, "CAFE", 5);
+    // for (int i = 0; i < )
+    uart_write_bytes(IPC, (const char *)&cast, sizeof cast);
+    // uart_write_bytes(IPC, "CAFE", 5);
     // nothing else we can do here
     return;
   }
@@ -245,10 +323,24 @@ void vTcpReceiver(void *arg) {
     while ((valread = read(new_socket, buffer, 1024)) > 0) {
       // Reading data from the client
       buffer[valread] = '\0'; // Ensure the buffer is null-terminated
+      printf("Read: %d\n", valread);
       printf("%s\n", buffer);
       // TODO: maybe parse
-      vControlListener(buffer);
+      if (valread > 10) {
+        char max_msg_allowed[10] = {0};
+        int i = 0;
+        // copy last 32 numbers to the array
+        for (int rev_index = valread; rev_index >= valread - 10; rev_index--) {
+          printf("char: %c\n", buffer[rev_index]);
+          max_msg_allowed[i++] = buffer[rev_index];
+        }
+        max_msg_allowed[i] = 0;
+        vControlListener(max_msg_allowed);
+        printf("Split: %s\n", max_msg_allowed);
+      } else
+        vControlListener(buffer);
       memset(buffer, 0, sizeof(buffer));
+      // close(new_socket);
     }
   }
 }
@@ -265,27 +357,31 @@ void app_main() {
 
   // UART1 Peripheral initialization
   uart_config_t uart_config = {
-      .baud_rate = 115200,
+      .baud_rate = 9600,
       .data_bits = UART_DATA_8_BITS,
       .parity = UART_PARITY_DISABLE,
       .stop_bits = UART_STOP_BITS_1,
       .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
       .source_clk = UART_SCLK_DEFAULT,
-      .rx_flow_ctrl_thresh = 0,
+      // .rx_flow_ctrl_thresh = 0,
   };
 
   // Configure UART pins tx: 19, rx: 18
-  uart_driver_install(IPC, BUFSIZ * 2, 0, 0, NULL, 0);
+
   ESP_ERROR_CHECK(uart_param_config(IPC, &uart_config));
-  uart_set_pin(IPC, 19, 18, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+  ESP_ERROR_CHECK(
+      uart_set_pin(IPC, 4, 5, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+  ESP_ERROR_CHECK(uart_driver_install(IPC, BUFSIZ * 2, BUFSIZ * 2, 0, NULL, 0));
 
   wifi_init_softap();
   esp_err_t cam_err = xCameraConfig();
   // FreeRTOS task initializer
-  xTaskCreate(vTcpReceiver, "TCP Receiver", 8192, NULL, 2, &listenTCPHandle);
+  // maximum priority for control messages
+  xTaskCreate(vTcpReceiver, "TCP Receiver", 8192, NULL, 9, &listenTCPHandle);
+  xTaskCreate(vUdpServer, "UDP Server", 8192, NULL, 2, NULL);
   // Only create camera task if we could initialize it
   if (cam_err == ESP_OK) {
-    xTaskCreate(vCameraTask, "Camera task", 8192, NULL, 2, NULL);
+    xTaskCreate(vCameraTask, "Camera task", 8192, NULL, 3, NULL);
   }
 
   while (1)
