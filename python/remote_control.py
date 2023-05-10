@@ -4,8 +4,8 @@ from PIL import Image
 from PIL import ImageTk
 import socket
 import time
-#import cv2
-#import imutils
+import cv2
+import imutils
 
 # Define la app
 app = tk.Tk()
@@ -81,13 +81,13 @@ def mov_atras():
     cliente.send(mensaje)
 
 # Enviar un mensaje TCP al servidor con el movimiento hacia la derecha
-def mov_der():
+def mov_izq():
     movement = 0xAA0169FF
     mensaje = bytes(str(movement),'utf8')
     cliente.send(mensaje)
 
 # Enviar un mensaje TCP al servidor con el movimiento hacia la izquierda
-def mov_izq():
+def mov_der():
     movement = 0xAA0196FF
     mensaje = bytes(str(movement),'utf8')
     cliente.send(mensaje)
@@ -117,13 +117,13 @@ def giro_atras_izq():
     cliente.send(mensaje)
 
 # Enviar un mensaje TCP al servidor con el movimiento diagonal alante derecha
-def diag_der_alante():
+def diag_izq_alante():
     movement = 0xAA0109FF
     mensaje = bytes(str(movement),'utf8')
     cliente.send(mensaje)
 
 # Enviar un mensaje TCP al servidor con el movimiento diagonal alante izquierda
-def diag_izq_alante():
+def diag_der_alante():
     movement = 0xAA0106FF
     mensaje = bytes(str(movement),'utf8')
     cliente.send(mensaje)

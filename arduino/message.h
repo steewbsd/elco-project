@@ -40,13 +40,13 @@ enum CMD_MOTOR_IDENT {
 enum CMD_CAMERA_IDENT {
     /* These 4 values represent moving the camera */
     // Right
-    FWD_R = 0x01,
+    C_FWD_R = 0x01,
     // Left
-    FWD_L = 0x02,
+    C_FWD_L = 0x02,
     // Up
-    RWD_R = 0x04,
+    C_RWD_R = 0x04,
     // Down
-    RWD_L = 0x08,
+    C_RWD_L = 0x08,
 };
 
 struct Message msg_gen (enum CMD_IDENT ident, uint8_t payload);

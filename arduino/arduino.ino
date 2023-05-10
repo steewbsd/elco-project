@@ -6,8 +6,8 @@
 #include <AFMotor.h>
 #include <SoftwareSerial.h>
 
-AF_DCMotor motor_FWD_R(1);
-AF_DCMotor motor_FWD_L(2);
+AF_DCMotor motor_FWD_L(1);
+AF_DCMotor motor_FWD_R(2);
 AF_DCMotor motor_RWD_R(4);
 AF_DCMotor motor_RWD_L(3);
 
@@ -19,8 +19,8 @@ uint32_t control = 0;
 uint32_t last_control = 0;
 
 // Ultrasound sensor
-const int ping = 11;
-const int echo = 13;
+const int ping = 9;
+const int echo = 10;
 
 Message ctrl_msg = { 0 };
 
@@ -60,7 +60,7 @@ void loop() {
   if (soundPulse != 0)
     Serial.println(soundPulse / 29 / 2);
 
-  // Serial.print("tick");
+  //Serial.print("tick");
   while (interboard.available() > 0) {
     if (i == 4) {
       i = 0;
@@ -101,36 +101,36 @@ void loop() {
       // Forward movement
       if (ctrl_msg.payload & FWD_R) {
         Serial.println("FWD_R");
-        motor_FWD_R.run(FORWARD);
+        motor_FWD_R.run(BACKWARD);
       } else
-        motor_FWD_R.run(BRAKE);
+        motor_FWD_R.run(RELEASE);
 
       if (ctrl_msg.payload & FWD_L) {
         Serial.println("FWD_L");
-        motor_FWD_L.run(BACKWARD);
+        motor_FWD_L.run(FORWARD);
       } else
-        motor_FWD_L.run(BRAKE);
+        motor_FWD_L.run(RELEASE);
 
       if (ctrl_msg.payload & RWD_R) {
         Serial.println("RWD_R");
         motor_RWD_R.run(FORWARD);
       } else
-        motor_RWD_R.run(BRAKE);
+        motor_RWD_R.run(RELEASE);
 
       if (ctrl_msg.payload & RWD_L) {
         Serial.println("RWD_L");
         motor_RWD_L.run(BACKWARD);
       } else
-        motor_RWD_L.run(BRAKE);
+        motor_RWD_L.run(RELEASE);
 
       // Backward movement
       if (ctrl_msg.payload & FWD_R_BACK) {
         Serial.println("FWD_R_BACK");
-        motor_FWD_R.run(BACKWARD);
+        motor_FWD_R.run(FORWARD);
       }
       if (ctrl_msg.payload & FWD_L_BACK) {
         Serial.println("FWD_L_BACK");
-        motor_FWD_L.run(FORWARD);
+        motor_FWD_L.run(BACKWARD);
       }
       if (ctrl_msg.payload & RWD_R_BACK) {
         Serial.println("RWD_R_BACK");
