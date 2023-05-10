@@ -7,14 +7,32 @@ import time
 import cv2
 import imutils
 
-'''def iniciar():
+# Define la app
+app = tk.Tk()
+'''app.geometry('600x400')'''
+
+now = time.time()
+
+# Crear un socket UDP
+UDP_IP = "192.168.4.2"  # Dirección IP de destino
+UDP_PORT = 6667  # Puerto de destino
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind((UDP_IP, UDP_PORT))
+
+def iniciar():
     global cap
-    cap = cv2.VideoCapture('udp://@192.168.4.2:6667')
+    # Capturar el flujo de vídeo desde el socket UDP
+    # cap = cv2.VideoCapture("udp://{}:{}".format(UDP_IP, UDP_PORT))
+    data, addr = sock.recvfrom(1024)  # Recibir hasta 1024 bytes de datos
+    print("Recibido:", data.decode())
+    if cap is not None:
+        print('Conectado correctamente')
     visualizar()
 
 def visualizar():
     global cap
     if cap is not None:
+        print('Envia cosas')
         ret, frame = cap.read()
         if ret == True:
             frame = imutils.resize(frame, width=640)
@@ -32,30 +50,15 @@ def finalizar():
     global cap
     cap.release()
 
-cap = None'''
-
-# Define la app
-app = tk.Tk()
-app.geometry('600x400')
-
-now = time.time()
-
-'''# Crear un socket UDP
-UDP_IP = "192.168.4.2"  # Dirección IP de destino
-UDP_PORT = 6667  # Puerto de destino
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind((UDP_IP, UDP_PORT))
-
-# Capturar el flujo de vídeo desde el socket UDP
-cap = cv2.VideoCapture("udp://{}:{}".format(UDP_IP, UDP_PORT))'''
+cap = None
 
 # Dirección IP y puerto del servidor TCP
-IP = '192.168.4.1'
-PUERTO = 6666
+TCP_IP = '192.168.4.1'
+TCP_PORT = 6666
 
 # Crear una conexión TCP con el servidor
 cliente = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-cliente.connect((IP, PUERTO))
+cliente.connect((TCP_IP, TCP_PORT))
 
 key_presses = []
 
@@ -402,11 +405,11 @@ def callback_release(event):
         label["text"] = key_presses
 
 
-'''btnIniciar = tk.Button(app, text="Iniciar", width=45, command=iniciar)
+btnIniciar = tk.Button(app, text="Iniciar", width=45, command=iniciar)
 btnIniciar.grid(column=0, row=0, padx=5, pady=5)
 
 btnFinalizar = tk.Button(app, text="Finalizar", width=45, command=finalizar)
-btnFinalizar.grid(column=1, row=0, padx=5, pady=5)'''
+btnFinalizar.grid(column=1, row=0, padx=5, pady=5)
 
 '''label = tk.Label(app)
 label.grid(column=0, row=1, columnspan=2)'''
@@ -415,8 +418,8 @@ label.grid(column=0, row=1, columnspan=2)'''
 app.bind("<KeyPress>", callback_press)
 app.bind("<KeyRelease>", callback_release)
 label = tk.Label(app, text="Press any key")
-'''label.grid(column=0, row=1, columnspan=2)'''
-label.pack()
+label.grid(column=0, row=1, columnspan=2)
+'''label.pack()'''
 
 # Bucle principal
 app.mainloop()
