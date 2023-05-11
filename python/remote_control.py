@@ -22,9 +22,9 @@ sock.bind((UDP_IP, UDP_PORT))
 def iniciar():
     global cap
     # Capturar el flujo de vídeo desde el socket UDP
-    # cap = cv2.VideoCapture("udp://{}:{}".format(UDP_IP, UDP_PORT))
-    data, addr = sock.recvfrom(1024)  # Recibir hasta 1024 bytes de datos
-    print("Recibido:", data.decode())
+    cap = cv2.VideoCapture("udp://{}:{}".format(UDP_IP, UDP_PORT))
+    # data, addr = sock.recvfrom(1024)  # Recibir hasta 1024 bytes de datos
+    # print("Recibido:", data.decode())
     if cap is not None:
         print('Conectado correctamente')
     visualizar()
