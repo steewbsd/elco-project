@@ -55,11 +55,18 @@ void setup() {
 void loop() {
   int i = 0;
   // check ultrasound
-  analogWrite(ping, 127);
+  /* analogWrite(ping, 127);
   long soundPulse = pulseIn(echo, HIGH);
+  int dist = soundPulse / 29 / 2;
   if (soundPulse != 0)
-    Serial.println(soundPulse / 29 / 2);
-
+    Serial.println(dist);
+  if (dist < 10 && dist > 1) {
+    Serial.println("Stopping");
+    motor_FWD_L.run(RELEASE);
+    motor_FWD_R.run(RELEASE);
+    motor_RWD_R.run(RELEASE);
+    motor_RWD_L.run(RELEASE);
+  }*/
   //Serial.print("tick");
   while (interboard.available() > 0) {
     if (i == 4) {
